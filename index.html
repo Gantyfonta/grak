@@ -1,61 +1,82 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Chat with Grak (AI Caveman)</title>
+  <title>Chat with Grak the Caveman</title>
   <style>
     body { font-family: sans-serif; background: #f4f1e9; }
-    #chat { width: 500px; margin: auto; border: 2px solid #654321; padding: 10px; background: #fff8dc; border-radius: 10px; height: 400px; overflow-y: auto; }
+    #chat { width: 500px; margin: 20px auto; border: 2px solid #654321; padding: 10px; background: #fff8dc; border-radius: 10px; height: 400px; overflow-y: auto; }
     .msg { margin: 8px 0; }
     .user { color: darkblue; }
     .grak { color: darkgreen; font-weight: bold; }
-    input { width: 400px; padding: 5px; }
+    #input { width: 400px; padding: 5px; }
     button { padding: 5px 10px; }
+    #loading { text-align: center; color: #a0522d; margin-top: 10px; }
   </style>
 </head>
 <body>
-  <h1 style="text-align:center;">💬 Talk to Grak the Caveman</h1>
-  <div id="chat"></div>
+  <h1 style="text-align:center;">💬 Talk to Grak</h1>
+  <div id="chat"><div id="loading">Loading Grak AI… please wait</div></div>
   <div style="text-align:center; margin-top:10px;">
-    <input id="input" placeholder="Say something..." />
-    <button onclick="send()">Send</button>
+    <input id="input" placeholder="Say something..." disabled />
+    <button id="sendBtn" disabled>Send</button>
   </div>
 
   <script type="module">
     import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers";
 
-    let chat = document.getElementById("chat");
-    let input = document.getElementById("input");
+    const chat = document.getElementById("chat");
+    const input = document.getElementById("input");
+    const sendBtn = document.getElementById("sendBtn");
+    const loading = document.getElementById("loading");
 
-    // Load small GPT-2 model in browser
-    const generator = await pipeline("text-generation", "Xenova/distilgpt2");
+    let conversation = []; // store conversation history
 
-    function cavemanize(text) {
-      return "Grak say: " + text
-        .replace(/\bI am\b/gi, "me")
-        .replace(/\bmy\b/gi, "Grak’s")
-        .replace(/\byou\b/gi, "u")
-        .replace(/\bare\b/gi, "is")
-        .replace(/\bthe\b/gi, "")
-        .replace(/[.,!?]/g, "") // less grammar
-        + " Ugh!";
+    async function initGrak() {
+      // Load GPT-2 model in browser
+      const generator = await pipeline("text-generation", "Xenova/distilgpt2");
+      
+      loading.remove();
+      input.disabled = false;
+      sendBtn.disabled = false;
+
+      function cavemanize(text) {
+        return "Grak say: " + text
+          .replace(/\bI am\b/gi, "me")
+          .replace(/\bmy\b/gi, "Grak’s")
+          .replace(/\byou\b/gi, "u")
+          .replace(/\bare\b/gi, "is")
+          .replace(/\bthe\b/gi, "")
+          .replace(/[.,!?]/g, "") + " Ugh!";
+      }
+
+      window.send = async function() {
+        let userText = input.value.trim();
+        if (!userText) return;
+        input.value = "";
+
+        // add user message
+        chat.innerHTML += `<div class="msg user">You: ${userText}</div>`;
+        conversation.push(`User: ${userText}`);
+
+        // generate AI reply based on conversation
+        let prompt = conversation.join("\n") + "\nGrak:";
+
+        let output = await generator(prompt, { max_new_tokens: 50 });
+        let rawReply = output[0].generated_text.replace(prompt, "").trim();
+        let reply = cavemanize(rawReply);
+
+        chat.innerHTML += `<div class="msg grak">${reply}</div>`;
+        chat.scrollTop = chat.scrollHeight;
+
+        // store Grak reply
+        conversation.push(`Grak: ${rawReply}`);
+      };
+
+      sendBtn.addEventListener("click", send);
+      input.addEventListener("keypress", e => { if(e.key === "Enter") send(); });
     }
 
-    async function send() {
-      let userText = input.value.trim();
-      if (!userText) return;
-      input.value = "";
-
-      chat.innerHTML += `<div class="msg user">You: ${userText}</div>`;
-
-      // Generate continuation
-      let output = await generator(userText, { max_new_tokens: 30 });
-      let rawReply = output[0].generated_text.replace(userText, "").trim();
-
-      let reply = cavemanize(rawReply);
-      chat.innerHTML += `<div class="msg grak">${reply}</div>`;
-
-      chat.scrollTop = chat.scrollHeight;
-    }
+    initGrak();
   </script>
 </body>
 </html>
