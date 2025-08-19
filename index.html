@@ -29,12 +29,10 @@
     const sendBtn = document.getElementById("sendBtn");
     const loading = document.getElementById("loading");
 
-    let conversation = []; // store conversation history
-
     async function initGrak() {
-      // Load GPT-2 model in browser
+      // Use a smaller GPT-2 variant for speed
       const generator = await pipeline("text-generation", "Xenova/distilgpt2");
-      
+
       loading.remove();
       input.disabled = false;
       sendBtn.disabled = false;
@@ -46,31 +44,32 @@
           .replace(/\byou\b/gi, "u")
           .replace(/\bare\b/gi, "is")
           .replace(/\bthe\b/gi, "")
-          .replace(/[.,!?]/g, "") + " Ugh!";
+          .replace(/[.,!?]/g, "")
+          .split(" ")
+          .slice(0, 15) // limit length
+          .join(" ") + " Ugh!";
       }
 
-      window.send = async function() {
+      async function send() {
         let userText = input.value.trim();
         if (!userText) return;
         input.value = "";
 
-        // add user message
         chat.innerHTML += `<div class="msg user">You: ${userText}</div>`;
-        conversation.push(`User: ${userText}`);
-
-        // generate AI reply based on conversation
-        let prompt = conversation.join("\n") + "\nGrak:";
-
-        let output = await generator(prompt, { max_new_tokens: 50 });
-        let rawReply = output[0].generated_text.replace(prompt, "").trim();
-        let reply = cavemanize(rawReply);
-
-        chat.innerHTML += `<div class="msg grak">${reply}</div>`;
+        chat.innerHTML += `<div class="msg grak" id="thinking">Grak thinking...</div>`;
         chat.scrollTop = chat.scrollHeight;
 
-        // store Grak reply
-        conversation.push(`Grak: ${rawReply}`);
-      };
+        // Generate based only on the last user input
+        let output = await generator(userText, { max_new_tokens: 25, temperature: 0.9 });
+        let rawReply = output[0].generated_text.replace(userText, "").trim();
+
+        // Clean it into caveman speech
+        let reply = cavemanize(rawReply);
+
+        document.getElementById("thinking").remove();
+        chat.innerHTML += `<div class="msg grak">${reply}</div>`;
+        chat.scrollTop = chat.scrollHeight;
+      }
 
       sendBtn.addEventListener("click", send);
       input.addEventListener("keypress", e => { if(e.key === "Enter") send(); });
