@@ -1,118 +1,249 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Grak the Caveman</title>
-  <style>
-    body {
-      background: #222;
-      color: #eee;
-      font-family: monospace;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      margin: 0;
-    }
-    #chat {
-      width: 90%;
-      max-width: 600px;
-      height: 60vh;
-      overflow-y: auto;
-      border: 2px solid #555;
-      border-radius: 10px;
-      padding: 10px;
-      margin-bottom: 10px;
-      background: #111;
-    }
-    .user { color: #8fdfff; }
-    .grak { color: #ffb347; }
-    #inputArea {
-      display: flex;
-      width: 90%;
-      max-width: 600px;
-    }
-    input {
-      flex: 1;
-      padding: 10px;
-      border: none;
-      border-radius: 5px;
-      margin-right: 5px;
-    }
-    button {
-      padding: 10px;
-      background: #444;
-      color: #eee;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-    button:hover { background: #666; }
-  </style>
+<meta charset="UTF-8" />
+<title>Grak the Caveman — Free AI</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#111; color:#eee; font-family:system-ui, sans-serif; display:flex; min-height:100vh; }
+  .app { max-width:800px; margin:auto; padding:16px; width:100%; display:flex; flex-direction:column; gap:12px; }
+  h1 { margin:0; font-size:1.4rem; opacity:.9; }
+  #chat { flex:1; min-height:50vh; background:#0b0b0b; border:1px solid #222; border-radius:12px; padding:12px; overflow-y:auto; }
+  .msg { margin:.5rem 0; max-width:75%; padding:.6rem .8rem; border-radius:10px; line-height:1.35; }
+  .you { background:#1f2937; margin-left:auto; }
+  .grak { background:#1a1a1a; border:1px solid #262626; }
+  .sys { color:#bbb; font-style:italic; }
+  .row { display:flex; gap:8px; }
+  input, button, select {
+    background:#1a1a1a; color:#eee; border:1px solid #333; border-radius:10px; padding:.7rem .8rem;
+  }
+  input { flex:1; }
+  button { cursor:pointer; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .tiny { font-size:.85rem; opacity:.8; }
+</style>
 </head>
 <body>
-  <h1>💬 Talk to Grak</h1>
-  <div id="chat"></div>
-  <div id="inputArea">
-    <input id="userInput" type="text" placeholder="Say something to Grak..." />
-    <button onclick="sendMessage()">Send</button>
+  <div class="app">
+    <h1>💬 Talk to <strong>Grak</strong> (free, browser-only)</h1>
+    <div id="chat">
+      <div class="msg grak">Grak say: Me awake. Ugh!</div>
+      <div class="msg sys">Loading small brain so Grak think… first time may take a bit, then browser remember.</div>
+    </div>
+    <div class="row">
+      <input id="input" placeholder="Ask Grak anything…" disabled />
+      <button id="sendBtn" disabled>Send</button>
+    </div>
+    <div class="row tiny">
+      <label>Model:
+        <select id="modelPick">
+          <option value="Xenova/gpt2-tiny">gpt2-tiny (fastest)</option>
+          <option value="Xenova/distilgpt2" selected>distilgpt2 (smarter)</option>
+        </select>
+      </label>
+      <span class="tiny">No server. Wikipedia + Dictionary + Math tools included.</span>
+    </div>
   </div>
 
-  <script type="module">
-    import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.9.0";
+<script type="module">
+/* ===== Free, in-browser AI with simple “tools” =====
+   - Transformers.js model for general replies (no API key)
+   - Wikipedia summary fetch for factual “what/who is …”
+   - Dictionary API for “define …”
+   - Safe math for arithmetic
+   Everything stays free & works on GitHub Pages.
+*/
+import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.9.0";
 
-    let generator;
-    const chatBox = document.getElementById("chat");
-    const input = document.getElementById("userInput");
+const chat = document.getElementById("chat");
+const input = document.getElementById("input");
+const sendBtn = document.getElementById("sendBtn");
+const modelPick = document.getElementById("modelPick");
 
-    async function loadModel() {
-      addMessage("Grak is waking up from nap... (loading AI)", "grak");
-      generator = await pipeline("text-generation", "Xenova/distilgpt2");
-      addMessage("Grak ready. Grak listen now.", "grak");
+let generator = null;
+let loading = false;
+
+// --- UI helpers ---
+function addMsg(text, who="grak") {
+  const div = document.createElement("div");
+  div.className = "msg " + (who === "you" ? "you" : who === "sys" ? "sys" : "grak");
+  if (who === "you") div.textContent = "You: " + text;
+  else if (who === "grak") div.textContent = "Grak say: " + text;
+  else div.textContent = text;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+function setReady(ready) {
+  input.disabled = !ready;
+  sendBtn.disabled = !ready;
+}
+
+// --- Caveman post-processor (keeps tone + cuts repetition) ---
+function cavemanize(raw) {
+  if (!raw) raw = "me grunt";
+  // strip weird role echoes / repeats
+  raw = raw.replace(/(?:^|\s)(grak:?\s*){2,}/gi, " ").replace(/\s+/g," ").trim();
+  // keep it short-ish
+  const maxWords = 28;
+  let words = raw.split(" ").slice(0, maxWords).join(" ");
+
+  // simple grammar breaks
+  words = words
+    .replace(/\bI am\b/gi, "me")
+    .replace(/\bI'm\b/gi, "me")
+    .replace(/\bmy\b/gi, "Grak’s")
+    .replace(/\byou\b/gi, "u")
+    .replace(/\byour\b/gi, "u")
+    .replace(/\bare\b/gi, "is")
+    .replace(/\bthe\b/gi, "")
+    .replace(/[“”"']/g, "")
+    .replace(/\s([,.;!?])/g, "$1");
+
+  // sprinkle caveman flavor if missing
+  if (!/ugh!?$/i.test(words)) words += " Ugh!";
+  return words;
+}
+
+// --- Lightweight intent detection ---
+function detectIntent(q) {
+  const s = q.toLowerCase().trim();
+  // math: numbers and operators only (safe eval later)
+  if (/^[\d\s+\-*/^().%]+$/.test(s)) return { type: "math", expr: s };
+  if (/^(what|who|where|when|why|how)\s+is\s+.+/.test(s) || /^wiki:\s*/.test(s)) {
+    return { type: "wiki", topic: s.replace(/^wiki:\s*/,"").replace(/^(what|who|where|when|why|how)\s+is\s+/,"").trim() };
+  }
+  if (/^(define|definition of)\s+/.test(s)) {
+    return { type: "define", word: s.replace(/^(define|definition of)\s+/,"").split(/\s+/)[0] };
+  }
+  return { type: "chat" };
+}
+
+// --- Safe math (only numbers and + - * / % ^ ( ) . ) ---
+function safeMath(expr) {
+  const allowed = /^[\d\s+\-*/^().%]+$/;
+  if (!allowed.test(expr)) throw new Error("bad expr");
+  const jsExpr = expr.replace(/\^/g,"**");
+  // eslint-disable-next-line no-new-func
+  return Function(`"use strict"; return (${jsExpr});`)();
+}
+
+// --- Tools: Wikipedia + Dictionary (free, no keys) ---
+async function wikiSummary(topic) {
+  if (!topic) throw new Error("no topic");
+  const url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + encodeURIComponent(topic);
+  const r = await fetch(url, { headers: { "Accept":"application/json" }});
+  if (!r.ok) throw new Error("wiki fail");
+  const j = await r.json();
+  if (j.extract) return j.extract;
+  if (j.description) return j.description;
+  throw new Error("no extract");
+}
+
+async function defineWord(word) {
+  const url = "https://api.dictionaryapi.dev/api/v2/entries/en/" + encodeURIComponent(word);
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("no def");
+  const j = await r.json();
+  const first = j[0];
+  const m = first?.meanings?.[0];
+  const def = m?.definitions?.[0]?.definition;
+  if (def) return `${word}: ${def}`;
+  throw new Error("no def");
+}
+
+// --- Load/Reload model ---
+async function loadModel() {
+  if (loading) return;
+  loading = true;
+  setReady(false);
+  addMsg("Grak sharpening rock… small brain downloading.", "sys");
+  try {
+    generator = await pipeline("text-generation", modelPick.value);
+    // model hint
+    addMsg(`Brain ready (${modelPick.value.split("/").pop()}).`, "sys");
+  } catch (e) {
+    console.error(e);
+    addMsg("Grak brain fall from mammoth. Try reload page.", "sys");
+  } finally {
+    loading = false;
+    setReady(true);
+  }
+}
+
+// --- Main brain: pick tool → otherwise tiny model ---
+async function grakAnswer(userText) {
+  const intent = detectIntent(userText);
+
+  // 1) Tools first (fast & precise)
+  try {
+    if (intent.type === "math") {
+      const v = safeMath(intent.expr);
+      return cavemanize(`answer ${v}`);
     }
-
-    function addMessage(text, sender) {
-      const div = document.createElement("div");
-      div.className = sender;
-      div.textContent = (sender === "user" ? "You: " : "Grak: ") + text;
-      chatBox.appendChild(div);
-      chatBox.scrollTop = chatBox.scrollHeight;
+    if (intent.type === "wiki") {
+      const sum = await wikiSummary(intent.topic);
+      return cavemanize(sum);
     }
-
-    async function sendMessage() {
-      const text = input.value.trim();
-      if (!text) return;
-      addMessage(text, "user");
-      input.value = "";
-
-      if (!generator) {
-        addMessage("Grak brain not ready yet!", "grak");
-        return;
-      }
-
-      // Generate caveman reply
-      const output = await generator("Caveman Grak say: " + text, {
-        max_new_tokens: 40,
-        temperature: 0.9,
-        top_p: 0.85,
-      });
-
-      let reply = output[0].generated_text
-        .replace(/^.*Caveman Grak say:/i, "")
-        .replace(/[\r\n]+/g, " ")
-        .trim();
-
-      if (reply.length === 0) reply = "Ugh... Grak confused.";
-
-      addMessage(reply, "grak");
+    if (intent.type === "define") {
+      const def = await defineWord(intent.word);
+      return cavemanize(def);
     }
+  } catch (e) {
+    // If tool fails, fall through to model
+  }
 
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") sendMessage();
-    });
+  // 2) Model fallback (kept short, de-looped)
+  if (!generator) await loadModel();
 
-    loadModel();
-  </script>
+  // Minimal prompt to avoid role-echo loops
+  const prompt = `You are Grak, funny caveman. Answer briefly like caveman.\nHuman: ${userText}\nGrak:`;
+  const out = await generator(prompt, {
+    max_new_tokens: 40,
+    temperature: 0.9,
+    top_p: 0.9,
+    repetition_penalty: 1.2
+  });
+  let raw = out?.[0]?.generated_text?.replace(prompt, "").trim() || "me grunt";
+  // hard stop at end of first line/sentence
+  raw = raw.split(/\n|(?<=[.!?])\s/)[0];
+  return cavemanize(raw);
+}
+
+// --- Wire up UI ---
+async function send() {
+  const text = input.value.trim();
+  if (!text) return;
+  addMsg(text, "you");
+  input.value = "";
+  const thinkingId = crypto.randomUUID();
+  const thinking = document.createElement("div");
+  thinking.className = "msg grak sys";
+  thinking.id = thinkingId;
+  thinking.textContent = "Grak thinking…";
+  chat.appendChild(thinking);
+  chat.scrollTop = chat.scrollHeight;
+
+  try {
+    const reply = await grakAnswer(text);
+    thinking.remove();
+    addMsg(reply, "grak");
+  } catch (e) {
+    console.error(e);
+    thinking.remove();
+    addMsg("Head hurt. Try simpler words.", "grak");
+  }
+}
+
+sendBtn.addEventListener("click", send);
+input.addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+modelPick.addEventListener("change", async () => {
+  generator = null;
+  await loadModel();
+});
+
+// Load smarter default first (distilgpt2). Switch to tiny if you want speed.
+loadModel();
+</script>
 </body>
 </html>
