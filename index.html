@@ -1,81 +1,75 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Chat with Grak the Caveman</title>
+  <meta charset="UTF-8">
+  <title>Grak the Caveman</title>
   <style>
-    body { font-family: sans-serif; background: #f4f1e9; }
-    #chat { width: 500px; margin: 20px auto; border: 2px solid #654321; padding: 10px; background: #fff8dc; border-radius: 10px; height: 400px; overflow-y: auto; }
-    .msg { margin: 8px 0; }
-    .user { color: darkblue; }
-    .grak { color: darkgreen; font-weight: bold; }
-    #input { width: 400px; padding: 5px; }
-    button { padding: 5px 10px; }
-    #loading { text-align: center; color: #a0522d; margin-top: 10px; }
+    body { font-family: sans-serif; background:#222; color:#eee; display:flex; flex-direction:column; height:100vh; margin:0; }
+    #chat { flex:1; padding:10px; overflow-y:auto; }
+    .msg { margin:5px 0; padding:6px 10px; border-radius:6px; max-width:70%; }
+    .user { background:#444; margin-left:auto; }
+    .grak { background:#333; margin-right:auto; }
+    #inputArea { display:flex; padding:10px; background:#111; }
+    #input { flex:1; padding:8px; border:none; border-radius:4px; }
+    button { padding:8px 12px; margin-left:8px; background:#555; color:#fff; border:none; border-radius:4px; cursor:pointer; }
+    button:hover { background:#666; }
   </style>
 </head>
 <body>
-  <h1 style="text-align:center;">💬 Talk to Grak</h1>
-  <div id="chat"><div id="loading">Loading Grak AI… please wait</div></div>
-  <div style="text-align:center; margin-top:10px;">
-    <input id="input" placeholder="Say something..." disabled />
-    <button id="sendBtn" disabled>Send</button>
+  <div id="chat"><div class="msg grak">Grak say: Me awake. Ugh!</div></div>
+  <div id="inputArea">
+    <input id="input" placeholder="Say something to Grak...">
+    <button onclick="send()">Send</button>
   </div>
 
-  <script type="module">
-    import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers";
+<script type="module">
+import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers";
 
-    const chat = document.getElementById("chat");
-    const input = document.getElementById("input");
-    const sendBtn = document.getElementById("sendBtn");
-    const loading = document.getElementById("loading");
+let chat = document.getElementById("chat");
+let input = document.getElementById("input");
+let sendButton = document.querySelector("button");
 
-    async function initGrak() {
-      // Use a smaller GPT-2 variant for speed
-      const generator = await pipeline("text-generation", "Xenova/distilgpt2");
+chat.innerHTML += `<div class="msg grak">Loading Grak brain... wait...</div>`;
+sendButton.disabled = true;
+input.disabled = true;
 
-      loading.remove();
-      input.disabled = false;
-      sendBtn.disabled = false;
+async function initGrak() {
+  const generator = await pipeline("text-generation", "Xenova/gpt2-tiny"); // much smaller, faster
 
-      function cavemanize(text) {
-        return "Grak say: " + text
-          .replace(/\bI am\b/gi, "me")
-          .replace(/\bmy\b/gi, "Grak’s")
-          .replace(/\byou\b/gi, "u")
-          .replace(/\bare\b/gi, "is")
-          .replace(/\bthe\b/gi, "")
-          .replace(/[.,!?]/g, "")
-          .split(" ")
-          .slice(0, 15) // limit length
-          .join(" ") + " Ugh!";
-      }
+  function cavemanize(text) {
+    return "Grak say: " + text
+      .replace(/\bI am\b/gi, "me")
+      .replace(/\bmy\b/gi, "Grak’s")
+      .replace(/\byou\b/gi, "u")
+      .replace(/\bare\b/gi, "is")
+      .replace(/\bthe\b/gi, "")
+      .replace(/[.,!?]/g, "") + " Ugh!";
+  }
 
-      async function send() {
-        let userText = input.value.trim();
-        if (!userText) return;
-        input.value = "";
+  window.send = async function() {
+    let userText = input.value.trim();
+    if (!userText) return;
+    input.value = "";
 
-        chat.innerHTML += `<div class="msg user">You: ${userText}</div>`;
-        chat.innerHTML += `<div class="msg grak" id="thinking">Grak thinking...</div>`;
-        chat.scrollTop = chat.scrollHeight;
+    chat.innerHTML += `<div class="msg user">You: ${userText}</div>`;
 
-        // Generate based only on the last user input
-        let output = await generator(userText, { max_new_tokens: 25, temperature: 0.9 });
-        let rawReply = output[0].generated_text.replace(userText, "").trim();
+    let output = await generator(userText, { max_new_tokens: 25 });
+    let rawReply = output[0].generated_text.replace(userText, "").trim();
 
-        // Clean it into caveman speech
-        let reply = cavemanize(rawReply);
+    // fallback if model babbles too much
+    if (!rawReply) rawReply = "me grunt";
 
-        document.getElementById("thinking").remove();
-        chat.innerHTML += `<div class="msg grak">${reply}</div>`;
-        chat.scrollTop = chat.scrollHeight;
-      }
+    let reply = cavemanize(rawReply);
+    chat.innerHTML += `<div class="msg grak">${reply}</div>`;
+    chat.scrollTop = chat.scrollHeight;
+  };
 
-      sendBtn.addEventListener("click", send);
-      input.addEventListener("keypress", e => { if(e.key === "Enter") send(); });
-    }
+  chat.innerHTML += `<div class="msg grak">Grak ready! Talk now.</div>`;
+  sendButton.disabled = false;
+  input.disabled = false;
+}
 
-    initGrak();
-  </script>
+initGrak();
+</script>
 </body>
 </html>
