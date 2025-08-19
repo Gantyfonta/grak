@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Grak the Caveman — Free AI</title>
+<title>Friends AI Chat — Grak & Robert</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   body { margin:0; background:#111; color:#eee; font-family:system-ui, sans-serif; display:flex; min-height:100vh; }
@@ -12,6 +12,7 @@
   .msg { margin:.5rem 0; max-width:75%; padding:.6rem .8rem; border-radius:10px; line-height:1.35; }
   .you { background:#1f2937; margin-left:auto; }
   .grak { background:#1a1a1a; border:1px solid #262626; }
+  .robert { background:#1a1a1a; border:1px solid #262626; }
   .sys { color:#bbb; font-style:italic; }
   .row { display:flex; gap:8px; }
   input, button, select { background:#1a1a1a; color:#eee; border:1px solid #333; border-radius:10px; padding:.7rem .8rem; }
@@ -21,40 +22,48 @@
 </style>
 </head>
 <body>
-  <div class="app">
-    <h1>💬 Talk to <strong>Grak</strong> (caveman AI)</h1>
-    <div id="chat">
-      <div class="msg grak">Grak say: Me awake. Ugh!</div>
-      <div class="msg sys">Loading brain… first time may take a bit.</div>
-    </div>
-    <div class="row">
-      <input id="input" placeholder="Ask Grak anything…" disabled />
-      <button id="sendBtn" disabled>Send</button>
-    </div>
-    <div class="row sys">Model: distilgpt2 (can switch to gpt2-tiny for speed)</div>
-  </div>
+<div class="app">
+<h1>💬 Friends AI Chat</h1>
+<div class="row">
+  <label>AI: 
+    <select id="botSelect">
+      <option value="grak" selected>Grak (Caveman)</option>
+      <option value="robert">Robert (Normal)</option>
+    </select>
+  </label>
+</div>
+<div id="chat">
+  <div class="msg sys">Select a bot and start chatting!</div>
+</div>
+<div class="row">
+  <input id="input" placeholder="Ask something…" disabled />
+  <button id="sendBtn" disabled>Send</button>
+</div>
+<div class="row sys">Model: distilgpt2 (small, free, in-browser). Optionally can extend to free Hugging Face endpoint for smarter replies.</div>
+</div>
 
 <script type="module">
 import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.9.0";
 
-const chat = document.getElementById("chat");
-const input = document.getElementById("input");
-const sendBtn = document.getElementById("sendBtn");
+const chat=document.getElementById("chat");
+const input=document.getElementById("input");
+const sendBtn=document.getElementById("sendBtn");
+const botSelect=document.getElementById("botSelect");
 
-let generator = null;
+let generator=null;
 
 // helpers
-function addMsg(text, who="grak") {
-  const div = document.createElement("div");
-  div.className = "msg " + (who==="you"?"you":who==="sys"?"sys":"grak");
-  div.textContent = (who==="you" ? "You: " : who==="grak" ? "Grak: " : "") + text;
+function addMsg(text,who="grak"){
+  const div=document.createElement("div");
+  div.className="msg "+(who==="you"?"you":who==="grak"?"grak":"robert");
+  div.textContent=(who==="you"?"You: ":who==="grak"?"Grak: ":"Robert: ")+text;
   chat.appendChild(div);
-  chat.scrollTop = chat.scrollHeight;
+  chat.scrollTop=chat.scrollHeight;
 }
-function setReady(r) { input.disabled = !r; sendBtn.disabled = !r; }
+function setReady(r){input.disabled=!r;sendBtn.disabled=!r;}
 
 // caveman style
-function cavemanize(raw) {
+function cavemanize(raw){
   if(!raw) raw="me grunt";
   raw = raw.replace(/(?:^|\s)(grak:?\s*){2,}/gi," ").replace(/\s+/g," ").trim();
   const maxWords=28;
@@ -67,42 +76,50 @@ function cavemanize(raw) {
 }
 
 // load model
-async function loadModel() {
+async function loadModel(){
   setReady(false);
-  addMsg("Grak sharpening rock…", "sys");
-  generator = await pipeline("text-generation","Xenova/distilgpt2");
-  addMsg("Grak brain ready.", "sys");
+  addMsg("Brain loading…","sys");
+  generator=await pipeline("text-generation","Xenova/distilgpt2");
+  addMsg("Brain ready.","sys");
   setReady(true);
 }
 
-// grak answers
-async function grakAnswer(q) {
+// AI response
+async function getAIResponse(bot,q){
   if(!generator) await loadModel();
-  const prompt = `
-You are Grak, a caveman. Answer questions clearly and directly, in short caveman sentences. Never wander off-topic. Examples:
+  let prompt="";
+  if(bot==="grak"){
+    prompt=`You are Grak, a caveman. Answer clearly and directly, short caveman sentences. Examples:
 Human: What is fire?
 Grak: Fire hot. Grak use to cook. Ugh!
 Human: Who is Einstein?
 Grak: Smart man. He learn stars and numbers. Ugh!
 Human: ${q}
 Grak:`;
-  const out = await generator(prompt, {max_new_tokens:40,temperature:0.7,top_p:0.9,repetition_penalty:1.2});
-  let raw = out?.[0]?.generated_text?.replace(prompt,"").trim() || "me grunt";
-  raw = raw.split(/\n|(?<=[.!?])\s/)[0];
-  return cavemanize(raw);
+  } else {
+    prompt=`You are Robert, a helpful AI assistant. Answer questions clearly and directly.
+Human: ${q}
+Robert:`;
+  }
+
+  // in-browser generation
+  const out=await generator(prompt,{max_new_tokens:40,temperature:0.7,top_p:0.9,repetition_penalty:1.2});
+  let raw=out?.[0]?.generated_text?.replace(prompt,"").trim()||"I am not sure.";
+  raw=raw.split(/\n|(?<=[.!?])\s/)[0];
+  return bot==="grak"?cavemanize(raw):raw;
 }
 
 // send
-async function send() {
+async function send(){
   const text=input.value.trim(); if(!text) return;
+  const bot=botSelect.value;
   addMsg(text,"you"); input.value="";
-  const thinking = document.createElement("div"); thinking.className="msg grak sys"; thinking.textContent="Grak thinking…";
+  const thinking=document.createElement("div"); thinking.className="msg "+bot+" sys"; thinking.textContent=bot==="grak"?"Grak thinking…":"Robert thinking…";
   chat.appendChild(thinking); chat.scrollTop=chat.scrollHeight;
-  try {
-    const reply=await grakAnswer(text);
-    thinking.remove();
-    addMsg(reply,"grak");
-  } catch(e) { thinking.remove(); addMsg("Grak head hurt. Try simple words.", "grak"); console.error(e); }
+  try{
+    const reply=await getAIResponse(bot,text);
+    thinking.remove(); addMsg(reply,bot);
+  }catch(e){thinking.remove(); addMsg("Brain error. Try simple words.",bot); console.error(e);}
 }
 
 sendBtn.addEventListener("click",send);
